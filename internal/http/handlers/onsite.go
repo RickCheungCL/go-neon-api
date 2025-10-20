@@ -189,27 +189,54 @@ func (h *Handlers) CreateRoom(c *gin.Context) {
 		return
 	}
 
-	// Generate CUID instead of UUID
+	// Generate CUID
 	newID := cuid.New()
 
+	// Get full room data back
 	var row struct {
-		ID string `json:"id" gorm:"column:id"`
+		ID              string    `json:"id" gorm:"column:id"`
+		OnSiteVisitID   string    `json:"onSiteVisitId" gorm:"column:onSiteVisitId"`
+		Location        string    `json:"location" gorm:"column:location"`
+		LocationTagID   *string   `json:"locationTagId" gorm:"column:locationTagId"`
+		LightingIssue   string    `json:"lightingIssue" gorm:"column:lightingIssue"`
+		CustomerRequest string    `json:"customerRequest" gorm:"column:customerRequest"`
+		MountingKitQty  string    `json:"mountingKitQty" gorm:"column:mountingKitQty"`
+		MotionSensorQty int       `json:"motionSensorQty" gorm:"column:motionSensorQty"`
+		CreatedAt       time.Time `json:"createdAt" gorm:"column:createdAt"`
+		CeilingHeight   *int      `json:"ceilingHeight" gorm:"column:ceilingHeight"`
 	}
+
 	err := db.DB.Raw(
 		`INSERT INTO "OnSiteVisitRoom"
 		 ("id","onSiteVisitId","location","locationTagId","lightingIssue","customerRequest",
 		  "mountingKitQty","motionSensorQty","createdAt","ceilingHeight")
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, now(), ?)
-		 RETURNING "id"`,
+		 RETURNING "id","onSiteVisitId","location","locationTagId","lightingIssue","customerRequest",
+		           "mountingKitQty","motionSensorQty","createdAt","ceilingHeight"`,
 		newID, visitID, req.Location, req.LocationTagId, req.LightingIssue, req.CustomerRequest,
 		req.MountingKitQty, req.MotionSensorQty, req.CeilingHeight,
 	).Scan(&row).Error
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create failed"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"id": row.ID})
+	// Return complete room object with empty product arrays
+	c.JSON(http.StatusCreated, gin.H{
+		"id":              row.ID,
+		"onSiteVisitId":   row.OnSiteVisitID,
+		"location":        row.Location,
+		"locationTagId":   row.LocationTagID,
+		"lightingIssue":   row.LightingIssue,
+		"customerRequest": row.CustomerRequest,
+		"mountingKitQty":  row.MountingKitQty,
+		"motionSensorQty": row.MotionSensorQty,
+		"createdAt":       row.CreatedAt,
+		"ceilingHeight":   row.CeilingHeight,
+		"existing":        []any{},
+		"suggested":       []any{},
+	})
 }
 
 // PUT /api/rooms/:roomId
