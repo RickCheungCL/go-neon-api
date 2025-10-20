@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lucsky/cuid"
 	"github.com/rick/go-neon-api/internal/db"
 )
 
@@ -30,12 +31,13 @@ func (h *Handlers) EnsureOnSiteVisit(c *gin.Context) {
 		return
 	}
 
-	// Create new
+	// Create new with CUID
+	newID := cuid.New()
 	if err := db.DB.Raw(
 		`INSERT INTO "OnSiteVisit" ("id","caseId","createdAt")
-		 VALUES (gen_random_uuid()::text, ?, now())
+		 VALUES (?, ?, now())
 		 RETURNING "id","caseId","createdAt"`,
-		caseID,
+		newID, caseID,
 	).Scan(&head).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create visit failed"})
 		return
@@ -187,6 +189,9 @@ func (h *Handlers) CreateRoom(c *gin.Context) {
 		return
 	}
 
+	// Generate CUID instead of UUID
+	newID := cuid.New()
+
 	var row struct {
 		ID string `json:"id" gorm:"column:id"`
 	}
@@ -194,9 +199,9 @@ func (h *Handlers) CreateRoom(c *gin.Context) {
 		`INSERT INTO "OnSiteVisitRoom"
 		 ("id","onSiteVisitId","location","locationTagId","lightingIssue","customerRequest",
 		  "mountingKitQty","motionSensorQty","createdAt","ceilingHeight")
-		 VALUES (gen_random_uuid()::text, ?, ?, ?, ?, ?, ?, ?, now(), ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, now(), ?)
 		 RETURNING "id"`,
-		visitID, req.Location, req.LocationTagId, req.LightingIssue, req.CustomerRequest,
+		newID, visitID, req.Location, req.LocationTagId, req.LightingIssue, req.CustomerRequest,
 		req.MountingKitQty, req.MotionSensorQty, req.CeilingHeight,
 	).Scan(&row).Error
 	if err != nil {
