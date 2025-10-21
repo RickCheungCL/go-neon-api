@@ -49,7 +49,7 @@ func (h *Handlers) ListProducts(c *gin.Context) {
 
 	var rows []Row
 	sql := `
-		SELECT "id","name","wattage","category","description"
+		SELECT "id","name","wattage","category","description2"
 		FROM "Product"
 		` + whereSQL + `
 		ORDER BY "name" ASC
