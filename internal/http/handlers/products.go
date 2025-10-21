@@ -29,13 +29,13 @@ func (h *Handlers) ListProducts(c *gin.Context) {
 		Name        string  `json:"name"        gorm:"column:name"`
 		Wattage     float64 `json:"wattage"     gorm:"column:wattage"`
 		Category    *string `json:"category"    gorm:"column:category"`
-		Description *string `json:"description" gorm:"column:description"`
+		Description *string `json:"description" gorm:"column:description2"`
 	}
 
 	where := []string{}
 	args := []any{}
 	if q != "" {
-		where = append(where, `("name" ILIKE ? OR "description" ILIKE ?)`)
+		where = append(where, `("name" ILIKE ? OR "description2" ILIKE ?)`)
 		args = append(args, "%"+q+"%", "%"+q+"%")
 	}
 	if category != "" {
