@@ -284,12 +284,54 @@ func (h *Handlers) UpdateRoom(c *gin.Context) {
 }
 
 // DELETE /api/rooms/:roomId
+// DELETE /api/rooms/:roomId
 func (h *Handlers) DeleteRoom(c *gin.Context) {
 	roomID := c.Param("roomId")
-	if err := db.DB.Exec(`DELETE FROM "OnSiteVisitRoom" WHERE "id" = ?`, roomID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
+
+	// Start a transaction to ensure all deletes succeed or none do
+	tx := db.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Delete related records first (in order of dependencies)
+
+	// 1. Delete photos associated with this room
+	if err := tx.Exec(`DELETE FROM "Photo" WHERE "roomId" = ?`, roomID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete photos: " + err.Error()})
 		return
 	}
+
+	// 2. Delete suggested lights (replacement products)
+	if err := tx.Exec(`DELETE FROM "SuggestedLight" WHERE "roomId" = ?`, roomID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete suggested lights: " + err.Error()})
+		return
+	}
+
+	// 3. Delete existing lights (current products)
+	if err := tx.Exec(`DELETE FROM "ExistingLight" WHERE "roomId" = ?`, roomID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete existing lights: " + err.Error()})
+		return
+	}
+
+	// 4. Finally delete the room itself
+	if err := tx.Exec(`DELETE FROM "OnSiteVisitRoom" WHERE "id" = ?`, roomID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete room: " + err.Error()})
+		return
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit transaction: " + err.Error()})
+		return
+	}
+
 	c.Status(http.StatusNoContent)
 }
 
