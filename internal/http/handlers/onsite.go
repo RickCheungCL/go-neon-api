@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -285,53 +286,74 @@ func (h *Handlers) UpdateRoom(c *gin.Context) {
 
 // DELETE /api/rooms/:roomId
 // DELETE /api/rooms/:roomId
+// DELETE /api/rooms/:roomId
 func (h *Handlers) DeleteRoom(c *gin.Context) {
 	roomID := c.Param("roomId")
 
-	// Start a transaction to ensure all deletes succeed or none do
+	log.Printf("🗑️ Attempting to delete room: %s", roomID)
+
+	// Start a transaction
 	tx := db.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			log.Printf("❌ Panic during room deletion: %v", r)
 		}
 	}()
 
-	// Delete related records first (in order of dependencies)
-
-	// 1. Delete photos associated with this room
-	if err := tx.Exec(`DELETE FROM "Photo" WHERE "roomId" = ?`, roomID).Error; err != nil {
+	// 1. Delete photos
+	log.Printf("📸 Deleting photos for room: %s", roomID)
+	result := tx.Exec(`DELETE FROM "OnSiteVisitPhoto" WHERE "roomId" = ?`, roomID)
+	if result.Error != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete photos: " + err.Error()})
+		log.Printf("❌ Failed to delete photos: %v", result.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete photos: " + result.Error.Error()})
 		return
 	}
+	log.Printf("✅ Deleted %d photos", result.RowsAffected)
 
-	// 2. Delete suggested lights (replacement products)
-	if err := tx.Exec(`DELETE FROM "SuggestedLight" WHERE "roomId" = ?`, roomID).Error; err != nil {
+	// 2. Delete suggested products
+	log.Printf("💡 Deleting suggested products for room: %s", roomID)
+	result = tx.Exec(`DELETE FROM "OnSiteSuggestedProduct" WHERE "roomId" = ?`, roomID)
+	if result.Error != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete suggested lights: " + err.Error()})
+		log.Printf("❌ Failed to delete suggested products: %v", result.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete suggested products: " + result.Error.Error()})
 		return
 	}
+	log.Printf("✅ Deleted %d suggested products", result.RowsAffected)
 
-	// 3. Delete existing lights (current products)
-	if err := tx.Exec(`DELETE FROM "ExistingLight" WHERE "roomId" = ?`, roomID).Error; err != nil {
+	// 3. Delete existing products
+	log.Printf("🔦 Deleting existing products for room: %s", roomID)
+	result = tx.Exec(`DELETE FROM "OnSiteExistingProduct" WHERE "roomId" = ?`, roomID)
+	if result.Error != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete existing lights: " + err.Error()})
+		log.Printf("❌ Failed to delete existing products: %v", result.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete existing products: " + result.Error.Error()})
 		return
 	}
+	log.Printf("✅ Deleted %d existing products", result.RowsAffected)
 
-	// 4. Finally delete the room itself
-	if err := tx.Exec(`DELETE FROM "OnSiteVisitRoom" WHERE "id" = ?`, roomID).Error; err != nil {
+	// 4. Delete the room
+	log.Printf("🏠 Deleting room: %s", roomID)
+	result = tx.Exec(`DELETE FROM "OnSiteVisitRoom" WHERE "id" = ?`, roomID)
+	if result.Error != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete room: " + err.Error()})
+		log.Printf("❌ Failed to delete room: %v", result.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete room: " + result.Error.Error()})
 		return
 	}
+	log.Printf("✅ Deleted room (rows affected: %d)", result.RowsAffected)
 
 	// Commit the transaction
+	log.Printf("💾 Committing transaction...")
 	if err := tx.Commit().Error; err != nil {
+		log.Printf("❌ Failed to commit transaction: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit transaction: " + err.Error()})
 		return
 	}
 
+	log.Printf("✅ Room %s deleted successfully", roomID)
 	c.Status(http.StatusNoContent)
 }
 
